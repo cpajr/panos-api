@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 
 import re
+import os 
+import sys
 
 #***************************************
 #		CONFIG IMPORT
@@ -10,7 +12,20 @@ import re
 def panApiCall():
 
 	#Collect hostnames and API keys
-	print ("")
+	hosts = collectHosts()
+	returnOutput = ""
+	for host in hosts:
+
+		cmd = 'panxapi.py -h {}  -Xjo \'show session all\' -K {} --text'.format(host['hostname'],host['key'])
+
+		try:
+			output = os.popen(cmd).read()
+		except OSError:
+			print ("Error in executing command")
+			sys.exit()
+
+		returnOutput += output 
+	print (returnOutput)
 
 def collectHosts():
 
@@ -44,7 +59,7 @@ def collectHosts():
 '''
 def main():
 
-	print (collectHosts())
+	panApiCall()
 
 
 if __name__ == "__main__":
