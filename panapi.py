@@ -58,12 +58,27 @@ sessObj = Session()
 
 def collectSessions():
 
+	'''
+	This method will be called from the main routine.  It will 
+	call the method to collect the list of hosts from host-key.conf.
+	
+	Once the list is collected, it will then pass that list to 
+	panApiCall which will collect the list of sessions from the firewall.  
+
+	With the output received, the sessions will be sent for processing.  
+	'''
+
 	hosts = collectHosts()
 	for host in hosts:
 		output = panApiCall(host['hostname'],host['key'])
 		processSessions(output)
 
 def processSessions(data):
+
+	'''
+	Will iterate through the list of sessions and will add 
+	the session to the created class object.
+	'''
 
 	count = 0
 
@@ -81,6 +96,12 @@ def processSessions(data):
 		sessObj.add(tmp)
 
 def procTimestamp(strStamp=''):
+
+	'''
+	This will take the start time of session, as a string, 
+	and converts it to a python datetime object and then 
+	calculates the actual duration of the session.  
+	'''
 
 	timestamp = datetime.strptime(strStamp,"%a %b %d %H:%M:%S %Y")
 	current_timestamp = datetime.now()
@@ -146,7 +167,6 @@ def collectHosts():
 	returnList = []
 	for line in output:
 		if (re.search(r'^#.*',line)):
-			print ("Found the #")
 			continue
 		try:
 			hostname = re.search(r'^(.*):(.*)$', line).group(1)
@@ -160,7 +180,6 @@ def collectHosts():
 		if (hostname == ""):
 			continue
 		else:
-			print ("{}:key".format(hostname))
 			returnList.append({'hostname': hostname, 'key': key})
 
 	return returnList
