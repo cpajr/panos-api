@@ -23,33 +23,29 @@ class Session():
 		self.list_entries = []
 
 	def add(self, session):
-
-		if (len(self.list_entries) == 0):
-			
-			self.list_entries.append(
-				{'src': session['src'],
-				'session_count':1,
-				'session-list':[session]})
-		else:
-			d = next((item for item in self.list_entries if item['src'] == session['src']), False)
-			if (d):
-				d['session_count'] += 1
-				#tmpStr = 'session' + str(d['session_count'])
-				#d[tmpStr] = session
-				d['session-list'].append(session)
-
-			else:
+		if (session['session_length'] > 172800 and session['src-zone'] == 'Inside' and session['dst-zone'] == 'Public'):
+			if (len(self.list_entries) == 0):
+				
 				self.list_entries.append(
-						{'src': session['src'],
-						'session_count':1,
-						'session-list':[session]}
-					)
+					{'src': session['src'],
+					'session_count':1,
+					'session-list':[session]})
+			else:
+				d = next((item for item in self.list_entries if item['src'] == session['src']), False)
+				if (d):
+					d['session_count'] += 1
+					d['session-list'].append(session)
+
+				else:
+					self.list_entries.append(
+							{'src': session['src'],
+							'session_count':1,
+							'session-list':[session]}
+						)
 	def print(self):
 		print ("****************Begin List****************")
 		for entry in self.list_entries:
-			#if (entry['session_count'] > 1):
 			print (entry)
-				#pprint.pprint(entry)
 			print("")
 		print ("****************End List******************")
 
@@ -64,10 +60,8 @@ def collectSessions():
 
 	hosts = collectHosts()
 	for host in hosts:
-		panApiCall(host['hostname'],host['key'])
-		#output = json.loads(panApiCall(host['hostname'],host['key']))
-
-		#processSessions(output['response']['result']['entry'])
+		output = panApiCall(host['hostname'],host['key'])
+		processSessions(output)
 
 def processSessions(data):
 
@@ -75,17 +69,16 @@ def processSessions(data):
 
 	for item in data:
 
-		# duration = procTimestamp(item['start-time'])
+		duration = procTimestamp(item['start-time'])
+		tmp = {'src': item['source'],
+				'src-zone': item['from'],
+				'dst':item['dst'], 
+				'dst-zone': item['to'],
+				'app': item['application'], 
+				'amt_data': int(item['total-byte-count']), 
+				'session_length': duration }
 
-		# if (item['source'] == "10.101.2.41"):
-		# 	print ("{}->{}, {}".format(item['source'],item['dst'],item['application']))
-
-		# tmp = {'src': item['source'],'dst':item['dst'], 'app': item['application'], 'amt_data': int(item['total-byte-count']), 'session_length': duration }
-
-		# if (tmp['session_length'] > 172800):
-		#  	sessObj.add(tmp)
-		count += 1
-
+		sessObj.add(tmp)
 
 def procTimestamp(strStamp=''):
 
@@ -112,30 +105,39 @@ def panApiCall(host='', key=''):
 
 	countOutputJson = json.loads(countOutput)
 	count = int(countOutputJson['response']['result']['member'][0])
-	print (count)
+
 	'''
 	With the count of sessions in hand, we will not iterate through 
 	and get the entire list of sessions
 	'''
-	tmpNum = count // 1024.0
-	print (tmpNum)
-	numIterate = math.ceil(tmpNum)
-	print (numIterate)
-	tmp = 'type=op&cmd=<show><session><all><start-at>1024</start-at></all></session></show>&key={}'.format(key)
+	
+	numIterate = math.ceil(count / 1024)
 
-	#cmd = 'panxapi.py -h {}  -Xjo \'show session all start-at 6400\' -K {} --text'.format(host,key)
-	cmd = 'panxapi.py -h {}  -Xj -K {} --text --ad-hoc \'{}\''.format(host,key,tmp)
+	i = 0
+	returnOutput = []
+	while i < numIterate:
+		num = (i * 1024) + 1
+		
+		xmlCmd = 'type=op&cmd=<show><session><all><start-at>{}</start-at></all></session></show>&key={}'.format(num, key)
+		cmd = 'panxapi.py -h {}  -Xj -K {} --text --ad-hoc \'{}\''.format(host,key,xmlCmd)
+		try:
+			output = os.popen(cmd).read()
+		except OSError:
+			print("Error in executing command")
+			sys.exit()
 
-	try:
-		output = os.popen(cmd).read()
-	except OSError:
-		print("Error in executing command")
-		sys.exit()
+		i += 1
+		
+		tmpOutput = json.loads(output)
+		try:
+			tmpOut = tmpOutput['response']['result']['entry']
+		except TypeError:
+			print ("outside")
+			continue
 
-	returnOutput = json.loads(output)
-	#print (returnOutput['response']['result']['entry'])
-	#print (output)
-	return output
+		returnOutput.extend(tmpOut)
+
+	return returnOutput
 
 def collectHosts():
 
@@ -143,6 +145,9 @@ def collectHosts():
 		output = f.readlines()
 	returnList = []
 	for line in output:
+		if (re.search(r'^#.*',line)):
+			print ("Found the #")
+			continue
 		try:
 			hostname = re.search(r'^(.*):(.*)$', line).group(1)
 		except AttributeError:
@@ -155,6 +160,7 @@ def collectHosts():
 		if (hostname == ""):
 			continue
 		else:
+			print ("{}:key".format(hostname))
 			returnList.append({'hostname': hostname, 'key': key})
 
 	return returnList
@@ -166,9 +172,8 @@ def collectHosts():
 '''
 def main():
 
-	#panApiCall()
 	collectSessions()
-	#sessObj.print()
+	sessObj.print()
 
 
 if __name__ == "__main__":
